@@ -502,27 +502,31 @@ function boom(vol = .5, dur = .6, freq = 900) {
 const laugh = () => { for (let i = 0; i < 7; i++) setTimeout(() => beep('sawtooth', 330 - i * 22, 210 - i * 14, .13, .13), i * 150); };
 
 // ---- background music: procedural, scheduled one beat at a time. lvl 0 = calm (dialog), 1 = action, 2 = boss / RTX ON ----
-const BPM = 104, STEP = 60 / BPM / 4, CHORDS = [[38, 41, 45], [34, 38, 41], [41, 45, 48], [36, 40, 43]], mhz = n => 440 * 2 ** ((n - 69) / 12);
-// 8-bar melody over Dm / Bb / F / C (two bars each): [step, midi note, length in steps]
-const MELODY = [[[0, 69, 6], [6, 72, 2], [8, 74, 8]], [[0, 72, 4], [4, 69, 4], [8, 65, 8]], [[0, 70, 6], [6, 72, 2], [8, 74, 8]], [[0, 77, 4], [4, 74, 4], [8, 70, 8]],
-  [[0, 72, 6], [6, 74, 2], [8, 77, 8]], [[0, 77, 4], [4, 72, 4], [8, 69, 8]], [[0, 67, 6], [6, 72, 2], [8, 76, 8]], [[0, 74, 4], [4, 72, 4], [8, 67, 4], [12, 64, 4]]];
+const BPM = 100, STEP = 60 / BPM / 4, CHORDS = [[38, 41, 45], [38, 41, 46], [38, 43, 46], [37, 40, 45]], mhz = n => 440 * 2 ** ((n - 69) / 12);
+// dark, tense score in D minor: drone + pulsing bass under a slow half-step motif. 8-bar motif: [step, midi note, length in steps]
+const MELODY = [[[0, 62, 8], [8, 63, 8]], [[0, 62, 12], [12, 61, 4]], [[0, 65, 8], [8, 64, 8]], [[0, 68, 6], [6, 67, 2], [8, 62, 8]],
+  [[0, 67, 8], [8, 68, 8]], [[0, 67, 10], [10, 65, 2], [12, 63, 4]], [[0, 61, 8], [8, 64, 8]], [[0, 67, 4], [4, 64, 4], [8, 61, 8]]];
 function musicBeat(ctx, dest, t, beat, lvl) {
   const bar = beat >> 2, bi = beat & 3, ch = CHORDS[(bar >> 1) % 4];
   if (ctx._fxd !== dest) { ctx._fxd = dest; const d = ctx.createDelay(1), fb = ctx.createGain(), lp = ctx.createBiquadFilter(), w = ctx.createGain(); d.delayTime.value = STEP * 3; fb.gain.value = .38; lp.type = 'lowpass'; lp.frequency.value = 2200; w.gain.value = .5; d.connect(lp).connect(fb).connect(d); lp.connect(w).connect(dest); ctx._fx = d; }
   const env = (g, t0, v, d, a = .008) => { g.gain.setValueAtTime(.0001, t0); g.gain.linearRampToValueAtTime(v, t0 + a); g.gain.exponentialRampToValueAtTime(.0001, t0 + d); };
   const osc = (type, f, t0, v, d, cut, a, echo) => { const o = ctx.createOscillator(), g = ctx.createGain(), fl = ctx.createBiquadFilter(); o.type = type; o.frequency.value = f; fl.type = 'lowpass'; fl.frequency.value = cut || 8000; env(g, t0, v, d, a); o.connect(fl).connect(g); g.connect(dest); if (echo) g.connect(ctx._fx); o.start(t0); o.stop(t0 + d + .05); return o; };
   const nz = (t0, v, d, type, fq) => { if (!ctx._nz) { ctx._nz = ctx.createBuffer(1, ctx.sampleRate / 2, ctx.sampleRate); const dd = ctx._nz.getChannelData(0); for (let i = 0; i < dd.length; i++) dd[i] = Math.random() * 2 - 1; } const sr = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain(); sr.buffer = ctx._nz; fl.type = type; fl.frequency.value = fq; env(g, t0, v, d, .002); sr.connect(fl).connect(g).connect(dest); sr.start(t0); sr.stop(t0 + d + .02); };
-  if (bi === 0 && (bar & 1) === 0) for (const n of ch) { osc('triangle', mhz(n + 12), t, .06, STEP * 34, 900, .9); osc('sine', mhz(n + 24), t, .025, STEP * 34, 1200, 1.2); }   // warm pad
-  for (const [st, n, len] of MELODY[bar % 8]) { if (st >> 2 !== bi || (lvl === 0 && st !== 0)) continue; const ts = t + (st & 3) * STEP;   // melody
-    osc(lvl ? 'triangle' : 'sine', mhz(n), ts, lvl ? .075 : .05, STEP * len * 1.1, 2600, .02, true); if (lvl > 1) osc('sawtooth', mhz(n - 12), ts, .028, STEP * len, 1400, .03, true); }
-  if (lvl === 0) { if (bi === 0) osc('sine', mhz(ch[0]), t, .2, STEP * 12, 400, .05); return; }
+  if (bi === 0) { osc('sawtooth', mhz(26), t, .16, STEP * 18, 150, .3); osc('sawtooth', mhz(26) * 1.01, t, .12, STEP * 18, 130, .3); }   // low drone
+  if (bi === 0 && (bar & 1) === 0) for (const n of ch) { osc('sawtooth', mhz(n + 12), t, .03, STEP * 34, 480, 1.4); osc('sawtooth', mhz(n + 12) * .994, t, .025, STEP * 34, 420, 1.4); }   // dark strings
+  for (const [st, n, len] of MELODY[bar % 8]) { if (st >> 2 !== bi) continue; const ts = t + (st & 3) * STEP;   // half-step motif
+    if (lvl === 0) { if (st === 0 || st === 8) osc('sine', mhz(n + 12), ts, .045, STEP * 14, 3000, .01, true); continue; }
+    osc('sawtooth', mhz(n), ts, .055, STEP * len * 1.05, 1100, .06, true); osc('triangle', mhz(n - 12), ts, .05, STEP * len, 900, .06); if (lvl > 1) osc('sawtooth', mhz(n + 12), ts, .03, STEP * len, 1700, .04, true); }
+  if (bi === 0 && bar % 4 === 3) { osc('sine', mhz(86), t, .02, STEP * 16, 5000, 1.5, true); osc('sine', mhz(87), t, .02, STEP * 16, 5000, 1.5, true); }   // eerie high cluster
+  const kick = (ts, v) => { const o = osc('sine', 90, ts, v, .3, 0, .004); o.frequency.setValueAtTime(95, ts); o.frequency.exponentialRampToValueAtTime(38, ts + .18); };
+  if (lvl === 0) { if (bi === 0 && bar % 2 === 0) { kick(t, .3); kick(t + STEP * 3, .2); } return; }   // slow heartbeat
   for (let s = 0; s < 4; s++) { const ts = t + s * STEP, st = bi * 4 + s;
-    if (s === 0 && (lvl > 1 || bi % 2 === 0)) { const k = osc('sine', 110, ts, .42, .24, 0, .003); k.frequency.setValueAtTime(120, ts); k.frequency.exponentialRampToValueAtTime(45, ts + .14); }   // kick
-    if (s === 0 && bi % 2 === 1) nz(ts, .09, .16, 'bandpass', 1900);   // soft snare
-    if (s === 2 || (lvl > 1 && s % 2)) nz(ts, s === 2 ? .028 : .014, .035, 'highpass', 8000);   // hats
-    if (s % 2 === 0) { const bn = ch[0] + (st === 14 ? 7 : st === 6 ? 12 : 0); osc('triangle', mhz(bn), ts, .2, STEP * 1.7, 380, .006); osc('sine', mhz(bn - 12), ts, .16, STEP * 1.7, 200, .006); }   // bass
-    if (s % 2 === 0) osc('triangle', mhz(ch[[0, 1, 2, 1, 0, 2, 1, 2][st >> 1]] + 24), ts, .04, STEP * 1.2, 1800, .004, true);   // plucked arp
+    if (lvl > 1 ? s === 0 : (st === 0 || st === 3 || st === 8)) kick(ts, st === 3 ? .3 : .45);   // heartbeat / four on the floor
+    if (lvl > 1 && s === 0 && bi % 2 === 1) nz(ts, .1, .2, 'bandpass', 1300);   // snare
+    if (s % 2 === 0) nz(ts, s === 2 ? .02 : .012, .025, 'highpass', 9000);   // clock tick
+    if (lvl > 1 || s % 2 === 0) { const bn = ch[0] - (st === 15 ? 1 : 0); osc('sawtooth', mhz(bn), ts, s === 0 ? .2 : .14, STEP * .85, 260 + lvl * 120, .004); osc('sine', mhz(bn - 12), ts, .16, STEP * .85, 200, .004); }   // pulsing bass
   }
+  if (lvl > 1 && bi === 0 && bar % 2 === 0) { osc('sawtooth', mhz(62), t, .045, STEP * 5, 1500, .01, true); osc('sawtooth', mhz(68), t, .045, STEP * 5, 1500, .01, true); }   // tritone stab
 }
 let mg, mBeat = 0, mNext = 0, muted = false; try { muted = localStorage.getItem('mute') === '1'; } catch {}
 const musicLvl = () => S.result || S.dialog || !S.started ? 0 : (S.mi >= 4 && S.phase === 'play') || S.ult > 0 ? 2 : 1;
